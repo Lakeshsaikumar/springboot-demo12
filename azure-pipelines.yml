@@ -2,7 +2,7 @@ trigger:
 - master
 
 variables:
-  DEMO_PORT: 8090           # Change this to the port you want
+  DEMO_PORT: 8090           # Change this to your desired port
   REMOTE_DIR: /home/itadmin/javaapp
   SSH_ENDPOINT: Java_YAML
   MODULE_NAME: demo
@@ -34,13 +34,13 @@ stages:
     # Debug: List target folder
     - script: |
         echo "Listing files in $(MODULE_NAME)/target:"
-        ls -lh $(MODULE_NAME)/target || echo "No files found in target"
+        ls -lh "$(MODULE_NAME)/target" || echo "No files found in target"
       displayName: 'Debug: List demo artifact'
 
     # Publish the demo WAR
     - task: PublishPipelineArtifact@1
       inputs:
-        targetPath: '$(Build.SourcesDirectory)/$(MODULE_NAME)/target'
+        targetPath: "$(Build.SourcesDirectory)/$(MODULE_NAME)/target"
         artifactName: 'demo'
 
 # =========================
@@ -62,33 +62,32 @@ stages:
     # Debug: List downloaded files
     - script: |
         echo "Listing downloaded artifact contents:"
-        ls -lh $(Pipeline.Workspace)/demo || echo "No files downloaded"
+        ls -lh "$(Pipeline.Workspace)/demo" || echo "No files downloaded"
       displayName: 'Debug: List downloaded artifact'
 
     # Copy WAR to remote server
     - task: CopyFilesOverSSH@0
       inputs:
-        sshEndpoint: $(SSH_ENDPOINT)
-        sourceFolder: '$(Pipeline.Workspace)/demo'
+        sshEndpoint: "$(SSH_ENDPOINT)"
+        sourceFolder: "$(Pipeline.Workspace)/demo"
         contents: '*.war'
-        targetFolder: $(REMOTE_DIR)
+        targetFolder: "$(REMOTE_DIR)"
 
     # Kill old process on custom port, run WAR with nohup & logging
     - task: SSH@0
       inputs:
-        sshEndpoint: $(SSH_ENDPOINT)
+        sshEndpoint: "$(SSH_ENDPOINT)"
         runOptions: 'commands'
         commands: |
           set -e
           echo "Stopping any process on port $(DEMO_PORT)..."
-          fuser -k $(DEMO_PORT)/tcp || echo "No process running on port $(DEMO_PORT)"
+          fuser -k "$(DEMO_PORT)/tcp" || echo "No process running on port $(DEMO_PORT)"
 
           echo "Starting demo module on port $(DEMO_PORT)..."
-          nohup java -jar $(REMOTE_DIR)/$(MODULE_NAME)-*.war \
+          nohup java -jar "$(REMOTE_DIR)/$(MODULE_NAME)-*.war" \
             --server.port=$(DEMO_PORT) \
-            --spring.config.location=file:$(REMOTE_DIR)/application.properties \
-            > $(REMOTE_DIR)/app.log 2>&1 &
+            --spring.config.location=file:"$(REMOTE_DIR)/application.properties" \
+            > "$(REMOTE_DIR)/app.log" 2>&1 &
           disown
           echo "Demo module started successfully"
 
- 
