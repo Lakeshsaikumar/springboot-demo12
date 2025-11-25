@@ -1,0 +1,75 @@
+trigger:
+- master
+
+stages:
+
+# =========================
+# Stage 1: Build
+# =========================
+- stage: Build
+  displayName: 'Build and Package'
+  jobs:
+  - job: BuildJob
+    displayName: 'Build Maven Project'
+    pool:
+      vmImage: 'ubuntu-latest'
+    steps:
+    - checkout: self
+
+    - task: Maven@3
+      inputs:
+        mavenPomFile: 'pom.xml'
+        goals: 'clean package'
+        javaHomeOption: 'JDKVersion'
+        jdkVersionOption: '1.11'
+
+    - script: |
+        echo "Listing target folder:"
+        ls -lh target
+      displayName: 'Debug: List files'
+
+    - task: PublishPipelineArtifact@1
+      inputs:
+        targetPath: '$(Build.SourcesDirectory)/target'
+        artifactName: 'javaapp'
+
+# =========================
+# Stage 2: Deploy
+# =========================
+- stage: Deploy
+  displayName: 'Deploy Demo Backend'
+  dependsOn: Build
+  jobs:
+  - job: DeployJob
+    displayName: 'Deploy to Remote Server'
+    pool:
+      name: 'Java_Deployment'  # self-hosted agent pool if needed
+    steps:
+    - download: current
+      artifact: 'javaapp'
+
+    # Copy WAR to remote server
+    - task: CopyFilesOverSSH@0
+      inputs:
+        sshEndpoint: 'Java_YAML'
+        sourceFolder: '$(Pipeline.Workspace)/javaapp'
+        contents: '*.war'
+        targetFolder: '/home/itadmin/javaapp'
+
+    # Run WAR on remote server with nohup & logging
+    - task: SSH@0
+      inputs:
+        sshEndpoint: 'Java_YAML'
+        runOptions: 'commands'
+        commands: |
+          set -e
+          echo "Stopping previous demo backend..."
+          pkill -f demo-backend-*.war || echo "No previous app running"
+
+          echo "Starting demo backend..."
+          nohup java -jar /home/itadmin/javaapp/demo-backend-*.war \
+            --spring.config.location=file:/home/itadmin/javaapp/application.properties \
+            > /home/itadmin/javaapp/app.log 2>&1 &
+          disown
+          echo "Demo backend started successfully"
+      timeoutInMinutes: 10
