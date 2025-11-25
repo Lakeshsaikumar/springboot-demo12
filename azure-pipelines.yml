@@ -7,31 +7,34 @@ stages:
 # Stage 1: Build
 # =========================
 - stage: Build
-  displayName: 'Build and Package'
+  displayName: 'Build Demo Backend Only'
   jobs:
   - job: BuildJob
-    displayName: 'Build Maven Project'
+    displayName: 'Build Demo Backend Module'
     pool:
       vmImage: 'ubuntu-latest'
     steps:
     - checkout: self
 
+    # Build only the demo-backend module
     - task: Maven@3
       inputs:
         mavenPomFile: 'pom.xml'
         goals: 'clean package'
+        options: '-pl demo-backend -am'
         javaHomeOption: 'JDKVersion'
         jdkVersionOption: '1.11'
 
     - script: |
-        echo "Listing target folder:"
-        ls -lh target
-      displayName: 'Debug: List files'
+        echo "Listing target folder of demo-backend:"
+        ls -lh demo-backend/target
+      displayName: 'Debug: List demo-backend artifact'
 
+    # Publish the demo-backend WAR
     - task: PublishPipelineArtifact@1
       inputs:
-        targetPath: '$(Build.SourcesDirectory)/target'
-        artifactName: 'javaapp'
+        targetPath: '$(Build.SourcesDirectory)/demo-backend/target'
+        artifactName: 'demo-backend'
 
 # =========================
 # Stage 2: Deploy
@@ -43,31 +46,35 @@ stages:
   - job: DeployJob
     displayName: 'Deploy to Remote Server'
     pool:
-      name: 'Java_Deployment'  # self-hosted agent pool if needed
+      name: 'Java_Deployment'  # replace with your self-hosted agent if needed
     steps:
+    # Download the artifact
     - download: current
-      artifact: 'javaapp'
+      artifact: 'demo-backend'
 
     # Copy WAR to remote server
     - task: CopyFilesOverSSH@0
       inputs:
         sshEndpoint: 'Java_YAML'
-        sourceFolder: '$(Pipeline.Workspace)/javaapp'
+        sourceFolder: '$(Pipeline.Workspace)/demo-backend'
         contents: '*.war'
         targetFolder: '/home/itadmin/javaapp'
 
-    # Run WAR on remote server with nohup & logging
+    # Kill old process, run WAR on remote server with nohup & logging
     - task: SSH@0
       inputs:
         sshEndpoint: 'Java_YAML'
         runOptions: 'commands'
         commands: |
           set -e
-          echo "Stopping previous demo backend..."
-          pkill -f demo-backend-*.war || echo "No previous app running"
+          PORT=8090   # Change this to your desired port
 
-          echo "Starting demo backend..."
+          echo "Stopping any process on port $PORT..."
+          fuser -k $PORT/tcp || echo "No process running on port $PORT"
+
+          echo "Starting demo backend on port $PORT..."
           nohup java -jar /home/itadmin/javaapp/demo-backend-*.war \
+            --server.port=$PORT \
             --spring.config.location=file:/home/itadmin/javaapp/application.properties \
             > /home/itadmin/javaapp/app.log 2>&1 &
           disown
