@@ -4,43 +4,46 @@ trigger:
 stages:
 
 # =========================
-# Stage 1: Build Demo Backend Only
+# Stage 1: Build Demo Module
 # =========================
 - stage: Build
-  displayName: 'Build Demo Backend Module'
+  displayName: 'Build Demo Module'
   jobs:
   - job: BuildJob
-    displayName: 'Build Demo Backend Only'
+    displayName: 'Build Demo Only'
     pool:
       vmImage: 'ubuntu-latest'
     steps:
     - checkout: self
 
-    # Build only the demo-backend module and skip reactor errors for other modules
+    # Build only the demo module and skip other errors
     - task: Maven@3
       inputs:
         mavenPomFile: 'pom.xml'
         goals: 'clean package'
-        options: '-pl demo-backend -am -fn'
+        options: '-pl demo -am -fn'
         javaHomeOption: 'JDKVersion'
         jdkVersionOption: '1.11'
 
+    # Debug: List target folder
     - script: |
-        echo "Listing target folder of demo-backend:"
-        ls -lh demo-backend/target
-      displayName: 'Debug: List demo-backend artifact'
+        echo "Checking demo folder contents:"
+        ls -l demo || echo "demo folder not found"
+        echo "Listing target folder:"
+        ls -lh demo/target || echo "demo/target not found"
+      displayName: 'Debug: List demo artifact'
 
-    # Publish the demo-backend WAR
+    # Publish the demo WAR
     - task: PublishPipelineArtifact@1
       inputs:
-        targetPath: '$(Build.SourcesDirectory)/demo-backend/target'
-        artifactName: 'demo-backend'
+        targetPath: '$(Build.SourcesDirectory)/demo/target'
+        artifactName: 'demo'
 
 # =========================
 # Stage 2: Deploy
 # =========================
 - stage: Deploy
-  displayName: 'Deploy Demo Backend'
+  displayName: 'Deploy Demo Module'
   dependsOn: Build
   jobs:
   - job: DeployJob
@@ -50,13 +53,13 @@ stages:
     steps:
     # Download the artifact
     - download: current
-      artifact: 'demo-backend'
+      artifact: 'demo'
 
     # Copy WAR to remote server
     - task: CopyFilesOverSSH@0
       inputs:
         sshEndpoint: 'Java_YAML'
-        sourceFolder: '$(Pipeline.Workspace)/demo-backend'
+        sourceFolder: '$(Pipeline.Workspace)/demo'
         contents: '*.war'
         targetFolder: '/home/itadmin/javaapp'
 
@@ -67,16 +70,16 @@ stages:
         runOptions: 'commands'
         commands: |
           set -e
-          PORT=8090   # change to desired port
+          PORT=8090   # change this to your desired port
 
           echo "Stopping any process on port $PORT..."
           fuser -k $PORT/tcp || echo "No process running on port $PORT"
 
-          echo "Starting demo backend on port $PORT..."
-          nohup java -jar /home/itadmin/javaapp/demo-backend-*.war \
+          echo "Starting demo module on port $PORT..."
+          nohup java -jar /home/itadmin/javaapp/demo-*.war \
             --server.port=$PORT \
             --spring.config.location=file:/home/itadmin/javaapp/application.properties \
             > /home/itadmin/javaapp/app.log 2>&1 &
           disown
-          echo "Demo backend started successfully"
+          echo "Demo module started successfully"
       timeoutInMinutes: 10
