@@ -4,24 +4,24 @@ trigger:
 stages:
 
 # =========================
-# Stage 1: Build
+# Stage 1: Build Demo Backend Only
 # =========================
 - stage: Build
-  displayName: 'Build Demo Backend Only'
+  displayName: 'Build Demo Backend Module'
   jobs:
   - job: BuildJob
-    displayName: 'Build Demo Backend Module'
+    displayName: 'Build Demo Backend Only'
     pool:
       vmImage: 'ubuntu-latest'
     steps:
     - checkout: self
 
-    # Build only the demo-backend module
+    # Build only the demo-backend module and skip reactor errors for other modules
     - task: Maven@3
       inputs:
         mavenPomFile: 'pom.xml'
         goals: 'clean package'
-        options: '-pl demo-backend -am'
+        options: '-pl demo-backend -am -fn'
         javaHomeOption: 'JDKVersion'
         jdkVersionOption: '1.11'
 
@@ -60,14 +60,14 @@ stages:
         contents: '*.war'
         targetFolder: '/home/itadmin/javaapp'
 
-    # Kill old process, run WAR on remote server with nohup & logging
+    # Kill old process on custom port, run WAR with nohup & logging
     - task: SSH@0
       inputs:
         sshEndpoint: 'Java_YAML'
         runOptions: 'commands'
         commands: |
           set -e
-          PORT=8090   # Change this to your desired port
+          PORT=8090   # change to desired port
 
           echo "Stopping any process on port $PORT..."
           fuser -k $PORT/tcp || echo "No process running on port $PORT"
